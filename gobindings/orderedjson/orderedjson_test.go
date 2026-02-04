@@ -14,6 +14,8 @@ func TestObjectLen(t *testing.T) {
 	require.Equal(t, 1, ob.Len())
 	ob.Delete("b")
 	require.Equal(t, 0, ob.Len())
+	ob = Object{}
+	require.Equal(t, 0, ob.Len())
 }
 
 func TestObjectInit(t *testing.T) {
@@ -26,20 +28,24 @@ func TestObjectInit(t *testing.T) {
 	require.Equal(t, []string{"b"}, ob2.Keys())
 }
 
-// func TestObjectIter(t *testing.T) {
-//	ob := New(WithInitialData(Pair{"b", "1"}, Pair{"a", "2"}))
-//	i := 0
-//	for k, v := range ob.Pairs() {
-//		if i == 0 {
-//			require.Equal(t, "b", k)
-//			require.Equal(t, "1", v)
-//		} else {
-//			require.Equal(t, "a", k)
-//			require.Equal(t, "2", v)
-//		}
-//		i++
-//	}
-// }
+func TestObjectIter(t *testing.T) {
+	ob := New(WithInitialData(Pair{"b", "1"}, Pair{"a", "2"}))
+	i := 0
+	for k, v := range ob.Pairs() {
+		if i == 0 {
+			require.Equal(t, "b", k)
+			require.Equal(t, "1", v)
+		} else {
+			require.Equal(t, "a", k)
+			require.Equal(t, "2", v)
+		}
+		i++
+	}
+	ob = Object{}
+	for k, v := range ob.Pairs() {
+		require.Fail(t, "should not iterate over empty object", "key: %s, value: %v", k, v)
+	}
+}
 
 func TestObject_ToMap(t *testing.T) {
 	ob := New(WithInitialData(Pair{"b", "1"}, Pair{"a", "2"}))
@@ -50,6 +56,8 @@ func TestObject_ToMap(t *testing.T) {
 	ob.Set("f", ob2)
 	m = ob.ToMap()
 	require.Equal(t, map[string]any{"b": "1", "a": "2", "f": map[string]any{"c": []string{"3"}, "d": 4, "e": []any{"5", 6}}}, m)
+	ob = Object{}
+	require.Equal(t, map[string]any{}, ob.ToMap())
 }
 
 func TestObjectSetGetDelete(t *testing.T) {
@@ -78,6 +86,16 @@ func TestObjectSetGetDelete(t *testing.T) {
 	// remove key
 	ob.Delete("a")
 	require.Equal(t, []string{"b", "c"}, ob.Keys())
+
+	ob = Object{}
+	v, ok = ob.Get("c")
+	require.False(t, ok)
+	require.Nil(t, v)
+	ob.Delete("c") // don't panic
+	ob.Set("c", 5)
+	v, ok = ob.Get("c")
+	require.True(t, ok)
+	require.Equal(t, 5, v)
 }
 
 func TestObject_MarshalJSON(t *testing.T) {
@@ -119,7 +137,7 @@ func TestObject_MarshalJSON(t *testing.T) {
 		}, {
 			name:     "empty object marshals",
 			input:    Object{},
-			expected: `null`,
+			expected: `{}`,
 		},
 	}
 
