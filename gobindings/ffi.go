@@ -567,6 +567,7 @@ type Message struct {
 
 type RenderCmd3Options struct {
 	Messages                 []Message            `json:"messages"`
+	TemplateID               *string              `json:"template_id,omitempty"`
 	Template                 string               `json:"template"`
 	TemplateJinja            string               `json:"template_jinja"`
 	UseJinja                 bool                 `json:"use_jinja"`
@@ -586,6 +587,7 @@ type RenderCmd3Options struct {
 
 type RenderCmd4Options struct {
 	Messages                 []Message            `json:"messages"`
+	TemplateID               *string              `json:"template_id,omitempty"`
 	Template                 string               `json:"template"`
 	TemplateJinja            string               `json:"template_jinja"`
 	UseJinja                 bool                 `json:"use_jinja"`
@@ -894,6 +896,9 @@ func RenderCMD3(opts RenderCmd3Options) (string, error) {
 		escaped_special_tokens_json:     escapedTokens,
 	}
 
+	if opts.TemplateID != nil {
+		cOpts.template_id = a.CString(*opts.TemplateID)
+	}
 	if opts.DevInstruction != nil {
 		cOpts.dev_instruction = a.CString(*opts.DevInstruction)
 	}
@@ -956,6 +961,9 @@ func RenderCMD4(opts RenderCmd4Options) (string, error) {
 		escaped_special_tokens_json:     escapedTokens,
 	}
 
+	if opts.TemplateID != nil {
+		cOpts.template_id = a.CString(*opts.TemplateID)
+	}
 	if opts.DevInstruction != nil {
 		cOpts.dev_instruction = a.CString(*opts.DevInstruction)
 	}
