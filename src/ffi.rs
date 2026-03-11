@@ -724,7 +724,11 @@ pub unsafe extern "C" fn melody_aggregated_result_free(res: *mut CAggregatedResu
                 let _ = CString::from_raw(r.reasoning);
             }
             if !r.tool_calls.is_null() && r.tool_calls_len > 0 {
-                let tcs = Vec::from_raw_parts(r.tool_calls, r.tool_calls_len, r.tool_calls_len);
+                let tcs = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+                    r.tool_calls,
+                    r.tool_calls_len,
+                ))
+                .into_vec();
                 for tc in tcs {
                     if !tc.id.is_null() {
                         let _ = CString::from_raw(tc.id);
@@ -736,11 +740,11 @@ pub unsafe extern "C" fn melody_aggregated_result_free(res: *mut CAggregatedResu
                         let _ = CString::from_raw(tc.arguments);
                     }
                     if !tc.processed_params.is_null() && tc.processed_params_len > 0 {
-                        let params = Vec::from_raw_parts(
+                        let params = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                             tc.processed_params,
                             tc.processed_params_len,
-                            tc.processed_params_len,
-                        );
+                        ))
+                        .into_vec();
                         for p in params {
                             if !p.name.is_null() {
                                 let _ = CString::from_raw(p.name);
@@ -753,37 +757,41 @@ pub unsafe extern "C" fn melody_aggregated_result_free(res: *mut CAggregatedResu
                 }
             }
             if !r.citations.is_null() && r.citations_len > 0 {
-                let citations = Vec::from_raw_parts(r.citations, r.citations_len, r.citations_len);
+                let citations = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+                    r.citations,
+                    r.citations_len,
+                ))
+                .into_vec();
                 for citation in citations {
                     if !citation.text.is_null() {
                         let _ = CString::from_raw(citation.text);
                     }
                     if !citation.sources.is_null() && citation.sources_len > 0 {
-                        let sources = Vec::from_raw_parts(
+                        let sources = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                             citation.sources,
                             citation.sources_len,
-                            citation.sources_len,
-                        );
+                        ))
+                        .into_vec();
                         for source in sources {
                             if !source.tool_result_indices.is_null()
                                 && source.tool_result_indices_len > 0
                             {
-                                let _ = Vec::from_raw_parts(
+                                let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                                     source.tool_result_indices,
                                     source.tool_result_indices_len,
-                                    source.tool_result_indices_len,
-                                );
+                                ))
+                                .into_vec();
                             }
                         }
                     }
                 }
             }
             if !r.search_queries.is_null() && r.search_queries_len > 0 {
-                let sqs = Vec::from_raw_parts(
+                let sqs = Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                     r.search_queries,
                     r.search_queries_len,
-                    r.search_queries_len,
-                );
+                ))
+                .into_vec();
                 for sq in sqs {
                     if !sq.text.is_null() {
                         let _ = CString::from_raw(sq.text);
@@ -832,6 +840,8 @@ pub enum CContentType {
     Image = 3,
     /// Document content.
     Document = 4,
+    /// Multipart content.
+    Multipart = 5,
 }
 
 /// C-compatible enum for citation quality.
@@ -923,6 +933,10 @@ pub struct CContent {
     pub image: *const CImage,
     /// Document as a JSON string (null if None)
     pub document_json: *const c_char,
+    /// Pointer to array of multipart content structs (null if None)
+    pub multipart: *const CContent,
+    /// Number of multipart content items
+    pub multipart_len: usize,
 }
 
 /// C-compatible struct for tool calls.
@@ -1074,6 +1088,7 @@ fn map_content_type(t: CContentType) -> ContentType {
         CContentType::Thinking => ContentType::Thinking,
         CContentType::Image => ContentType::Image,
         CContentType::Document => ContentType::Document,
+        CContentType::Multipart => ContentType::Multipart,
     }
 }
 
@@ -1181,12 +1196,24 @@ unsafe fn convert_ccontent(content: &CContent) -> Content {
             _ => None,
         }
     };
+    let multipart = if content.multipart.is_null() {
+        None
+    } else {
+        let parts = unsafe { slice::from_raw_parts(content.multipart, content.multipart_len) };
+        Some(
+            parts
+                .iter()
+                .map(|c| unsafe { convert_ccontent(c) })
+                .collect(),
+        )
+    };
     Content {
         content_type: map_content_type(content.content_type),
         text: unsafe { cstr_opt(content.text) },
         thinking: unsafe { cstr_opt(content.thinking) },
         image,
         document,
+        multipart,
     }
 }
 
