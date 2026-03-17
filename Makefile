@@ -61,6 +61,22 @@ rust-build-with-tokenizers:
 	cargo clean && cargo build --release --features tkzrs
 
 #--------------------
+# GENERATE TOOL
+#--------------------
+
+generate-build:
+	cargo build --release -p template_generation
+
+target/release/template_generation:
+	$(MAKE) generate-build
+
+generate-run: target/release/template_generation
+	./target/release/template_generation $(ARGS)
+
+generate-dev:
+	cargo run -p template_generation -- $(ARGS)
+
+#--------------------
 # PYTHON THINGS
 #--------------------
 

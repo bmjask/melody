@@ -159,29 +159,26 @@ Your output should adhere to the following json schema:
         {%- endif -%}
       <|END_TEXT|>
       {%- else -%}
+        {%- assign last_was_text = false -%}
         {%- for content_item in message.content -%}
-          {%- assign prev_index = forloop.index0 | minus: 1 -%}
-          {%- if content_item.type == 'text' %}
-            {%- assign prev_item_not_text = false %}
-            {%- if prev_index >= 0 and message.content[prev_index].type != 'text' %}
-              {%- assign prev_item_not_text = true %}
-            {%- endif %}
-            {%- if forloop.first or prev_item_not_text -%}
+          {%- if content_item.type == 'text' -%}
+            {%- if last_was_text == false -%}
               <|START_TEXT|>
-            {%- endif %}
-            {%- if prev_index >= 0 and message.content[prev_index].type == 'text' %}
+            {%- else -%}
 {% endif -%}
             {{ content_item.data }}
-            {%- if forloop.last -%}
-              <|END_TEXT|>
-            {%- endif %}
+            {%- assign last_was_text = true -%}
           {%- else -%}
-          {%- if prev_index >= 0 and message.content[prev_index].type == 'text' -%}
-          <|END_TEXT|>
-          {%- endif -%}
+            {%- if last_was_text -%}
+              <|END_TEXT|>
+            {%- endif -%}
             {{ content_item.data }}
+            {%- assign last_was_text = false -%}
           {%- endif -%}
         {%- endfor -%}
+        {%- if last_was_text -%}
+          <|END_TEXT|>
+        {%- endif -%}
     {%- endif -%}
   <|END_OF_TURN_TOKEN|>
   {%- endif -%}
