@@ -741,12 +741,15 @@ fn convert_messages_for_jinja(messages: &[Value]) -> Result<Vec<Value>, MelodyEr
                         let doc_str = doc.as_str().ok_or(MelodyError::TemplateValidation(
                             "Invalid tool document format during jinja conversion".to_string(),
                         ))?;
+                        let doc_obj: Value = serde_json::from_str(doc_str)?;
+                        let doc_wrapper =
+                            json!({"type": "document", "document": {"data": doc_obj}});
                         msg_ref
                             .get_mut("content")
                             .unwrap()
                             .as_array_mut()
                             .unwrap()
-                            .push(serde_json::from_str(doc_str)?);
+                            .push(doc_wrapper);
                     }
                 }
             }
@@ -813,6 +816,7 @@ pub(crate) fn add_jinja_substitutions_common(
     substitutions.insert("add_generation_prompt".to_string(), Value::Bool(true));
     substitutions.insert("bos_token".to_string(), json!("<BOS_TOKEN>"));
     substitutions.insert("regen_tool_call_ids".to_string(), json!(false));
+    substitutions.insert("convert_first_system_msg".to_string(), json!(false));
 
     substitutions.insert(
         "tools".to_string(),
