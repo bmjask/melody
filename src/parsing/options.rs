@@ -149,7 +149,9 @@ impl FilterOptions {
     /// ```
     #[must_use]
     pub fn cmd4(mut self) -> Self {
-        self.default_mode = FilterMode::GroundedAnswer;
+        // Cmd4 generation prompts include the thinking start token,
+        // so parsing must start in thinking mode (ToolReason)
+        self.default_mode = FilterMode::ToolReason;
         self.right_trimmed = true;
         self.has_tool_call_id = true;
         self.cmd3_citations = true;

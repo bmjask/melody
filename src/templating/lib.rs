@@ -110,6 +110,8 @@ pub struct RenderCmd4Options<'a> {
     pub available_tools: Vec<Tool>,
     /// Grounding configuration.
     pub grounding: Option<Grounding>,
+    /// Reasoning/thinking mode configuration.
+    pub reasoning_type: Option<ReasoningType>,
     /// Optional prefix for the response.
     pub response_prefix: Option<String>,
     /// Optional JSON schema for structured output.
@@ -124,6 +126,7 @@ pub struct RenderCmd4Options<'a> {
 
 static CMD4V1_TEMPLATE: &str = include_str!("../../gen/templates/liquid/cmd4-v1.tmpl");
 static CMD4V1_JINJA_TEMPLATE: &str = include_str!("../../gen/templates/jinja/cmd4-v1.jinja");
+static CMD4V2_JINJA_TEMPLATE: &str = include_str!("../../gen/templates/jinja/cmd4-v2.jinja");
 impl Default for RenderCmd4Options<'_> {
     fn default() -> Self {
         Self {
@@ -137,6 +140,7 @@ impl Default for RenderCmd4Options<'_> {
             documents: Vec::new(),
             available_tools: Vec::new(),
             grounding: Some(Grounding::Enabled),
+            reasoning_type: None,
             response_prefix: None,
             json_schema: None,
             json_mode: false,
@@ -179,12 +183,14 @@ impl CMD3JinjaTemplates {
 
 enum CMD4JinjaTemplates {
     CMD4V1,
+    CMD4V2,
 }
 
 impl CMD4JinjaTemplates {
     fn get_template(&self) -> &str {
         match *self {
             CMD4JinjaTemplates::CMD4V1 => CMD4V1_JINJA_TEMPLATE,
+            CMD4JinjaTemplates::CMD4V2 => CMD4V2_JINJA_TEMPLATE,
         }
     }
 }
@@ -195,6 +201,7 @@ impl FromStr for CMD4JinjaTemplates {
     fn from_str(o: &str) -> Result<Self, Self::Err> {
         match o {
             "cmd4-v1" => Ok(Self::CMD4V1),
+            "cmd4-v2" => Ok(Self::CMD4V2),
             _ => Err(MelodyError::TemplateValidation(format!(
                 "unknown template id: {o}"
             ))),
@@ -269,17 +276,19 @@ pub fn render_cmd3(opts: &RenderCmd3Options) -> Result<String, MelodyError> {
             .as_ref()
             .map_or(Value::Null, |s| Value::String(s.as_str().to_string())),
     );
-    substitutions.insert(
-        "reasoning_options".to_string(),
-        Value::Object({
-            let mut m = Map::new();
-            m.insert(
-                "enabled".to_string(),
-                Value::Bool(matches!(opts.reasoning_type, Some(ReasoningType::Enabled))),
-            );
-            m
-        }),
-    );
+    if opts.reasoning_type.is_some() {
+        substitutions.insert(
+            "reasoning_options".to_string(),
+            Value::Object({
+                let mut m = Map::new();
+                m.insert(
+                    "enabled".to_string(),
+                    Value::Bool(matches!(opts.reasoning_type, Some(ReasoningType::Enabled))),
+                );
+                m
+            }),
+        );
+    }
     substitutions.insert("skip_preamble".to_string(), Value::Bool(opts.skip_preamble));
     substitutions.insert(
         "skip_thinking".to_string(),
@@ -298,7 +307,12 @@ pub fn render_cmd3(opts: &RenderCmd3Options) -> Result<String, MelodyError> {
     substitutions.insert("json_mode".to_string(), Value::Bool(opts.json_mode));
 
     if opts.use_jinja {
-        add_jinja_substitutions_common(&mut substitutions, opts.json_mode, &opts.json_schema);
+        add_jinja_substitutions_common(
+            &mut substitutions,
+            opts.json_mode,
+            &opts.json_schema,
+            &opts.reasoning_type,
+        );
         add_jinja_substitutions_cmd3(&mut substitutions, opts);
 
         let mut active_template = opts.template_jinja;
@@ -386,7 +400,12 @@ pub fn render_cmd4(opts: &RenderCmd4Options) -> Result<String, MelodyError> {
     substitutions.insert("json_mode".to_string(), Value::Bool(opts.json_mode));
 
     if opts.use_jinja {
-        add_jinja_substitutions_common(&mut substitutions, opts.json_mode, &opts.json_schema);
+        add_jinja_substitutions_common(
+            &mut substitutions,
+            opts.json_mode,
+            &opts.json_schema,
+            &opts.reasoning_type,
+        );
         add_jinja_substitutions_cmd4(&mut substitutions, opts);
 
         let mut active_template = opts.template_jinja;
@@ -480,13 +499,49 @@ mod tests {
     }
 
     #[test]
-    fn test_render_cmd3_jinja_from_dir() {
+    fn test_render_cmd3_v1_jinja_from_dir() {
         for (test_name, input_json, expected) in read_test_cases("jinja/cmd3_v1") {
-            println!("Running cmd3 jinja test case: {}", test_name);
+            println!("Running cmd3 v1 jinja test case: {}", test_name);
             let mut opts = deserialize::<_, RenderCmd3Options>(&input_json).unwrap();
             opts.use_jinja = true;
             opts.template_jinja = CMD3V1_JINJA_HF_TEMPLATE;
             let rendered = render_cmd3(&opts).unwrap();
+            assert_eq!(expected, rendered, "Failed test: {}", test_name);
+        }
+    }
+
+    #[test]
+    fn test_render_cmd3_v2_jinja_from_dir() {
+        for (test_name, input_json, expected) in read_test_cases("jinja/cmd3_v2") {
+            println!("Running cmd3 v2 jinja test case: {}", test_name);
+            let mut opts = deserialize::<_, RenderCmd3Options>(&input_json).unwrap();
+            opts.use_jinja = true;
+            opts.template_jinja = CMD3V2_JINJA_TEMPLATE;
+            let rendered = render_cmd3(&opts).unwrap();
+            assert_eq!(expected, rendered, "Failed test: {}", test_name);
+        }
+    }
+
+    #[test]
+    fn test_render_cmd3_v3_jinja_from_dir() {
+        for (test_name, input_json, expected) in read_test_cases("jinja/cmd3_v3") {
+            println!("Running cmd3 v3 jinja test case: {}", test_name);
+            let mut opts = deserialize::<_, RenderCmd3Options>(&input_json).unwrap();
+            opts.use_jinja = true;
+            opts.template_jinja = CMD3V3_JINJA_TEMPLATE;
+            let rendered = render_cmd3(&opts).unwrap();
+            assert_eq!(expected, rendered, "Failed test: {}", test_name);
+        }
+    }
+
+    #[test]
+    fn test_render_cmd4_v2_jinja_from_dir() {
+        for (test_name, input_json, expected) in read_test_cases("jinja/cmd4_v2") {
+            println!("Running cmd4 v2 jinja test case: {}", test_name);
+            let mut opts = deserialize::<_, RenderCmd4Options>(&input_json).unwrap();
+            opts.use_jinja = true;
+            opts.template_jinja = CMD4V2_JINJA_TEMPLATE;
+            let rendered = render_cmd4(&opts).unwrap();
             assert_eq!(expected, rendered, "Failed test: {}", test_name);
         }
     }
@@ -532,6 +587,20 @@ mod tests {
             println!("Running cmd4 jinja liquid test case: {}", test_name);
             let mut opts = deserialize::<_, RenderCmd4Options>(&input_json).unwrap();
             opts.use_jinja = true;
+            let rendered = render_cmd4(&opts).unwrap();
+            assert_eq!(expected, rendered, "Failed test: {}", test_name);
+        }
+    }
+
+    #[test]
+    fn test_render_cmd4_v2_jinja_from_liquid_dir() {
+        for (test_name, input_json, expected) in read_test_cases("cmd4_v2") {
+            println!("Running cmd4 v2 jinja liquid test case: {}", test_name);
+            let mut opts = deserialize::<_, RenderCmd4Options>(&input_json).unwrap();
+            opts.use_jinja = true;
+            if test_name != "template_provided" {
+                opts.template_jinja = CMD4V2_JINJA_TEMPLATE;
+            }
             let rendered = render_cmd4(&opts).unwrap();
             assert_eq!(expected, rendered, "Failed test: {}", test_name);
         }
