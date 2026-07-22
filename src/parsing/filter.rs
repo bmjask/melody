@@ -225,6 +225,13 @@ pub struct FilterImpl {
     pub(crate) buf: Vec<u8>,
     pub(crate) mode: FilterMode,
     pub(crate) done: bool,
+
+    // Optional lookup table for resolving citation indices back to original
+    // document identifiers, indexed as
+    // `document_ids[tool_call_index][tool_result_index]`. Populated by
+    // `FilterOptions::with_message_history`; empty means the parser will
+    // leave `Source::document_ids` empty on emitted citations.
+    pub(crate) document_ids: Vec<Vec<String>>,
 }
 
 struct SpecialTokenMatch {
@@ -287,6 +294,7 @@ impl FilterImpl {
             buf: Vec::new(),
             mode: FilterMode::PlainText,
             done: false,
+            document_ids: Vec::new(),
         }
     }
 
@@ -304,6 +312,7 @@ impl FilterImpl {
         self.cofl_nested_xml = options.cofl_nested_xml;
         self.default_mode = options.default_mode;
         self.mode = options.default_mode;
+        self.document_ids = options.document_ids;
 
         // Merge special token maps
         for (token, mode) in &options.special_token_map {

@@ -16,3 +16,4 @@ mod util;
 
 pub use lib::*;
 pub use types::*;
+pub use util::PromptRenderIds;
