@@ -177,17 +177,23 @@ impl PyFilterOptions {
         }
     }
 
-    /// Disable XML entity decoding for cofl parameter bodies.
-    fn cofl_no_xml_text_decode(&self) -> Self {
+    /// Enable or disable XML entity decoding for cofl parameter bodies.
+    ///
+    /// Does not change nested vs flat parsing. cmd5 defaults to false; pass
+    /// `True` with `cofl_nested_xml(False)` for cmd5-strict.
+    fn cofl_decode_xml_text(&self, enabled: bool) -> Self {
         PyFilterOptions {
-            inner: self.inner.clone().cofl_no_xml_text_decode(),
+            inner: self.inner.clone().cofl_decode_xml_text(enabled),
         }
     }
 
-    /// Parse cofl tool parameters as nested `<cofl:value>` nodes.
-    fn cofl_nested_xml(&self) -> Self {
+    /// Enable or disable nested `<cofl:value>` cofl parameter parsing.
+    ///
+    /// Nested is the cmd5 default. Pass `False` for cmd5-no-escape; chain
+    /// `cofl_decode_xml_text(True)` for cmd5-strict.
+    fn cofl_nested_xml(&self, enabled: bool) -> Self {
         PyFilterOptions {
-            inner: self.inner.clone().cofl_nested_xml(),
+            inner: self.inner.clone().cofl_nested_xml(enabled),
         }
     }
 
@@ -514,7 +520,7 @@ mod tests {
         let text = concat!(
             "<|START_THINKING|>thinking<|END_THINKING|>",
             "<cofl:tool_calls><cofl:tool_call id=\"0\" name=\"search\">",
-            "<cofl:tool_param name=\"q\" string=\"true\">hello</cofl:tool_param>",
+            "<cofl:value name=\"q\" type=\"raw\">hello</cofl:value>",
             "</cofl:tool_call></cofl:tool_calls>"
         );
         let result = filter.process_full_text(text);

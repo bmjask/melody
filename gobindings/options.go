@@ -14,8 +14,8 @@ type filterConfig struct {
 	streamToolActions       bool
 	streamNonGroundedAnswer bool
 	streamProcessedParams   bool
-	coflNoXMLTextDecode     bool
-	coflNestedXML           bool
+	coflDecodeXMLText       *bool
+	coflNestedXML           *bool
 	leftTrimmed             bool
 	rightTrimmed            bool
 	prefixTrim              string
@@ -57,11 +57,11 @@ func (cfg *filterConfig) apply(opts *FilterOptions) {
 	if cfg.streamProcessedParams {
 		opts.StreamProcessedParams()
 	}
-	if cfg.coflNoXMLTextDecode {
-		opts.CoflNoXMLTextDecode()
+	if cfg.coflNestedXML != nil {
+		opts.CoflNestedXML(*cfg.coflNestedXML)
 	}
-	if cfg.coflNestedXML {
-		opts.CoflNestedXML()
+	if cfg.coflDecodeXMLText != nil {
+		opts.CoflDecodeXMLText(*cfg.coflDecodeXMLText)
 	}
 
 	// Handle trimming options
@@ -154,18 +154,23 @@ func StreamProcessedParams() FilterOption {
 	}
 }
 
-// CoflNoXMLTextDecode disables XML entity decoding for cofl parameter bodies.
-func CoflNoXMLTextDecode() FilterOption {
+// CoflDecodeXMLText enables or disables XML entity decoding for cofl parameter
+// bodies. cmd5 defaults to false; pass true with CoflNestedXML(false) for
+// cmd5-strict.
+func CoflDecodeXMLText(enabled bool) FilterOption {
 	return func(cfg *filterConfig) {
-		cfg.coflNoXMLTextDecode = true
+		v := enabled
+		cfg.coflDecodeXMLText = &v
 	}
 }
 
-// CoflNestedXML parses cofl tool parameters as nested <cofl:value> nodes.
-// Use with the cmd5-nested-xml template. Also disables body entity decoding.
-func CoflNestedXML() FilterOption {
+// CoflNestedXML enables or disables nested <cofl:value> cofl parameter parsing.
+// Nested mode is the default for Cmd5. Pass false for cmd5-no-escape; chain
+// CoflDecodeXMLText(true) for cmd5-strict.
+func CoflNestedXML(enabled bool) FilterOption {
 	return func(cfg *filterConfig) {
-		cfg.coflNestedXML = true
+		v := enabled
+		cfg.coflNestedXML = &v
 	}
 }
 
