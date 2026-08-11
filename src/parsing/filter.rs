@@ -11,6 +11,7 @@ use crate::parsing::types::{
     AccumulatedToolCall, FilterAggregatedResult, FilterMode, FilterOutput, FilterSearchQueryDelta,
     SearchQueryDelta,
 };
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -186,6 +187,8 @@ pub struct FilterImpl {
     pub(crate) default_mode: FilterMode,
     pub(crate) special_token_map: HashMap<String, FilterMode>,
     pub(crate) special_token_start_bytes: [bool; 256],
+    special_token_patterns: Vec<String>,
+    special_token_matcher: Option<AhoCorasick>,
     pub(crate) stream_non_grounded_answer: bool,
     pub(crate) stream_tool_actions: bool,
     pub(crate) stream_processed_params: bool,
@@ -272,6 +275,8 @@ impl FilterImpl {
             default_mode: FilterMode::PlainText,
             special_token_map: HashMap::new(),
             special_token_start_bytes: [false; 256],
+            special_token_patterns: Vec::new(),
+            special_token_matcher: None,
             stream_non_grounded_answer: false,
             stream_tool_actions: false,
             stream_processed_params: false,
@@ -341,6 +346,18 @@ impl FilterImpl {
                 .insert(stop, FilterMode::ExclusiveStop);
         }
 
+        self.special_token_patterns = self.special_token_map.keys().cloned().collect();
+        self.special_token_matcher = if self.special_token_patterns.is_empty() {
+            None
+        } else {
+            Some(
+                AhoCorasickBuilder::new()
+                    .match_kind(MatchKind::LeftmostFirst)
+                    .build(&self.special_token_patterns)
+                    .expect("special tokens form a valid Aho-Corasick automaton"),
+            )
+        };
+
         self
     }
 
@@ -407,16 +424,22 @@ impl FilterImpl {
         }
 
         let decoded = String::from_utf8_lossy(&self.buf);
-        match find_partial(decoded.as_ref(), self.special_token_map.keys()) {
-            PartialMatchResult::NoMatch => SpecialTokenScanResult::NoMatch,
-            PartialMatchResult::Partial { .. } => SpecialTokenScanResult::Partial,
-            PartialMatchResult::Full { idx, sequence } => {
-                SpecialTokenScanResult::Found(SpecialTokenMatch {
-                    idx,
-                    sequence,
-                    decoded: decoded.into_owned(),
-                })
-            }
+        if let Some(token_match) = self
+            .special_token_matcher
+            .as_ref()
+            .and_then(|matcher| matcher.find(decoded.as_bytes()))
+        {
+            return SpecialTokenScanResult::Found(SpecialTokenMatch {
+                idx: token_match.start(),
+                sequence: self.special_token_patterns[token_match.pattern().as_usize()].clone(),
+                decoded: decoded.into_owned(),
+            });
+        }
+
+        if find_partial_suffix(decoded.as_ref(), self.special_token_patterns.iter()).is_some() {
+            SpecialTokenScanResult::Partial
+        } else {
+            SpecialTokenScanResult::NoMatch
         }
     }
 
@@ -797,19 +820,31 @@ impl Filter for FilterImpl {
 /// stop is a prefix of another (true for all current callers).
 pub(crate) fn find_partial<'a>(
     s: &str,
-    stops: impl Iterator<Item = &'a String>,
+    stops: impl Iterator<Item = &'a String> + Clone,
 ) -> PartialMatchResult {
     let mut best_full: Option<(usize, String)> = None;
+
+    for stop in stops.clone() {
+        if let Some(idx) = find_subslice(s.as_bytes(), stop.as_bytes())
+            && best_full.as_ref().is_none_or(|(cur_idx, _)| idx < *cur_idx)
+        {
+            best_full = Some((idx, stop.clone()));
+        }
+    }
+
+    if let Some((idx, sequence)) = best_full {
+        PartialMatchResult::Full { idx, sequence }
+    } else if let Some(idx) = find_partial_suffix(s, stops) {
+        PartialMatchResult::Partial { idx }
+    } else {
+        PartialMatchResult::NoMatch
+    }
+}
+
+fn find_partial_suffix<'a>(s: &str, stops: impl Iterator<Item = &'a String>) -> Option<usize> {
     let mut min_partial_idx: Option<usize> = None;
 
     for stop in stops {
-        if let Some(idx) = find_subslice(s.as_bytes(), stop.as_bytes()) {
-            if best_full.as_ref().is_none_or(|(cur_idx, _)| idx < *cur_idx) {
-                best_full = Some((idx, stop.clone()));
-            }
-            continue;
-        }
-        // Otherwise look for a tail-prefix partial match.
         let max_overlap = s.len().min(stop.len().saturating_sub(1));
         for overlap in (1..=max_overlap).rev() {
             let idx = s.len() - overlap;
@@ -825,13 +860,7 @@ pub(crate) fn find_partial<'a>(
         }
     }
 
-    if let Some((idx, sequence)) = best_full {
-        PartialMatchResult::Full { idx, sequence }
-    } else if let Some(idx) = min_partial_idx {
-        PartialMatchResult::Partial { idx }
-    } else {
-        PartialMatchResult::NoMatch
-    }
+    min_partial_idx
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
