@@ -45,6 +45,30 @@ fn stream_bytes(chunks: &[&str], repeats: usize) -> BytesCount {
     BytesCount::new(chunks.iter().map(|chunk| chunk.len()).sum::<usize>() * repeats)
 }
 
+fn bench_filter_construction(bencher: divan::Bencher, options: FilterOptions) {
+    bencher.bench_local(|| black_box(new_filter(black_box(options.clone()))));
+}
+
+#[divan::bench]
+fn new_filter_default(bencher: divan::Bencher) {
+    bench_filter_construction(bencher, FilterOptions::new());
+}
+
+#[divan::bench]
+fn new_filter_cmd3(bencher: divan::Bencher) {
+    bench_filter_construction(bencher, FilterOptions::new().cmd3());
+}
+
+#[divan::bench]
+fn new_filter_cmd4(bencher: divan::Bencher) {
+    bench_filter_construction(bencher, FilterOptions::new().cmd4());
+}
+
+#[divan::bench]
+fn new_filter_cmd5(bencher: divan::Bencher) {
+    bench_filter_construction(bencher, FilterOptions::new().cmd5());
+}
+
 #[divan::bench(args = [1_024, 16_384, 65_536])]
 fn write_decoded_plain_ascii(bencher: divan::Bencher, repeats: usize) {
     bencher
@@ -63,7 +87,7 @@ fn write_decoded_plain_unicode(bencher: divan::Bencher, repeats: usize) {
         });
 }
 
-#[divan::bench(args = [256, 4_096, 8_192])]
+#[divan::bench(args = [1, 8, 256, 4_096, 8_192])]
 fn write_decoded_cmd4_reasoning_stream(bencher: divan::Bencher, repeats: usize) {
     bencher
         .counter(stream_bytes(CMD4_REASONING_CHUNKS, repeats))
@@ -76,7 +100,7 @@ fn write_decoded_cmd4_reasoning_stream(bencher: divan::Bencher, repeats: usize) 
         });
 }
 
-#[divan::bench(args = [128, 1_024, 7_280])]
+#[divan::bench(args = [1, 8, 128, 1_024, 7_280])]
 fn write_decoded_cmd4_tool_stream(bencher: divan::Bencher, repeats: usize) {
     bencher
         .counter(stream_bytes(CMD4_TOOL_CHUNKS, repeats))
